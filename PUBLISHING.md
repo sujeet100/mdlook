@@ -86,6 +86,12 @@ The *failure* paths are not, and that's what first-wave users hit (see deal brea
 
 ## Suggested sequencing
 
-1. **Publishable correctness** — deal breakers 1–7, rename, README rewrite. Small, mostly mechanical.
-2. **First-wave retention** — pager, GitHub alerts, frontmatter, `--plain`/themes, friendly directory error.
+1. ✅ **Publishable correctness** — deal breakers 1–7, rename to mdlook, MIT, README rewrite. *(done 2026-06-12)*
+2. ✅ **First-wave retention** — pager, GitHub alerts, frontmatter, `--plain`, friendly directory error. *(done 2026-06-12; named theme presets considered and deliberately skipped — terminal-palette inheritance + `--plain` is the theming story for launch. Revisit only if users ask.)*
 3. **Growth** — Linux + graphics-protocol ladder (kitty → iTerm2 → sixel → half-blocks; mdcat is the reference), TOC/directory mode, math, export, streaming stdin.
+
+## Remaining before `npm publish`
+
+- Create the GitHub repo, add `repository`/`bugs`/`homepage` to package.json
+- Demo GIF for the README (terminal + popup side by side — this is the marketing)
+- `npm publish` (consider `--provenance` once the repo has CI)
