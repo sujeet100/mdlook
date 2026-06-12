@@ -110,7 +110,17 @@ function errorFence(source, message) {
   return `${code}\n  ${chalk.red(`✗ mermaid render failed: ${message}`)}\n`;
 }
 
-export async function renderToTerminal(markdown, { baseDir, images, refresh }) {
+// GitHub alert blockquotes: > [!NOTE] / [!TIP] / [!IMPORTANT] / [!WARNING] / [!CAUTION]
+const ALERTS = {
+  NOTE: { color: chalk.blue, icon: 'ℹ', label: 'Note' },
+  TIP: { color: chalk.green, icon: '✦', label: 'Tip' },
+  IMPORTANT: { color: chalk.magenta, icon: '✱', label: 'Important' },
+  WARNING: { color: chalk.yellow, icon: '⚠', label: 'Warning' },
+  CAUTION: { color: chalk.red, icon: '✖', label: 'Caution' },
+};
+const ALERT_RE = /\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/;
+
+export async function renderToTerminal(markdown, { baseDir, images, refresh, plain = false }) {
   const termCols = process.stdout.columns || 80;
   const lightBg = await detectLightBackground();
   const panelBg = chalk.bgAnsi256(lightBg ? 254 : 236);
@@ -126,16 +136,20 @@ export async function renderToTerminal(markdown, { baseDir, images, refresh }) {
   };
   let headingDepth = 2;
 
-  const ext = markedTerminal({
-    tab: 2,
-    width: termCols,
-    emoji: true,
-    showSectionPrefix: false, // drop literal #/## markers
-    firstHeading: (s) => chalk.bgCyan.black.bold(` ${s.toUpperCase()} `),
-    heading: (s) => (HEADING_STYLES[headingDepth] || HEADING_STYLES[6])(s),
-    hr: (s) => chalk.cyan.dim(s),
-    tableOptions: { style: { head: ['cyan', 'bold'], border: ['grey'] } },
-  });
+  const ext = markedTerminal(
+    plain
+      ? { tab: 2, width: termCols, emoji: true }
+      : {
+          tab: 2,
+          width: termCols,
+          emoji: true,
+          showSectionPrefix: false, // drop literal #/## markers
+          firstHeading: (s) => chalk.bgCyan.black.bold(` ${s.toUpperCase()} `),
+          heading: (s) => (HEADING_STYLES[headingDepth] || HEADING_STYLES[6])(s),
+          hr: (s) => chalk.cyan.dim(s),
+          tableOptions: { style: { head: ['cyan', 'bold'], border: ['grey'] } },
+        },
+  );
   const origHeading = ext.renderer.heading;
   ext.renderer.heading = function (token, ...rest) {
     headingDepth = token?.depth ?? 2;
@@ -145,12 +159,23 @@ export async function renderToTerminal(markdown, { baseDir, images, refresh }) {
   ext.renderer.code = function (token, ...rest) {
     // cli-highlight warns on stderr for languages it doesn't know (e.g. mermaid)
     if (token?.lang && !supportsLanguage(token.lang)) token = { ...token, lang: '' };
-    return codePanel(origCode.call(this, token, ...rest), panelBg, termCols);
+    const rendered = origCode.call(this, token, ...rest);
+    return plain ? rendered : codePanel(rendered, panelBg, termCols);
   };
   const origBlockquote = ext.renderer.blockquote;
   ext.renderer.blockquote = function (...args) {
-    const lines = origBlockquote.apply(this, args).replace(/^\n+|\n+$/g, '').split('\n');
-    return '\n' + lines.map((l) => chalk.cyan('▌') + l).join('\n') + '\n\n';
+    const rendered = origBlockquote.apply(this, args);
+    if (plain) return rendered;
+    let lines = rendered.replace(/^\n+|\n+$/g, '').split('\n');
+    // GitHub alert? styled title line + matching gutter color
+    const alertType = (lines[0]?.replace(ANSI_RE, '').match(ALERT_RE) || [])[1];
+    let bar = chalk.cyan;
+    if (alertType) {
+      const { color, icon, label } = ALERTS[alertType];
+      bar = color;
+      lines = [' ' + color.bold(`${icon} ${label}`), ...lines.slice(1)];
+    }
+    return '\n' + lines.map((l) => bar('▌') + l).join('\n') + '\n\n';
   };
   const marked = new Marked(ext);
   const tokens = marked.lexer(markdown);
@@ -188,13 +213,15 @@ export async function renderToTerminal(markdown, { baseDir, images, refresh }) {
   // Recolor list markers AFTER rendering: marked-terminal relies on literal
   // "* " prefixes while assembling nested lists, so this can't happen earlier.
   // Code-block lines are immune — they start with the panel's bg escape, not whitespace.
-  const ansi = marked
-    .parser(tokens)
-    .replace(/^(\s*(?:\*|\d+\.) (?:\x1b\[0m)?)\[x\]/gim, (_, pre) => pre + chalk.green('✔'))
-    .replace(/^(\s*(?:\*|\d+\.) (?:\x1b\[0m)?)\[ \]/gm, (_, pre) => pre + chalk.dim('☐'))
-    .replace(/^(\s*)\* /gm, (_, ind) => `${ind}${chalk.cyan('•')} `)
-    .replace(/^(\s*)(\d+)\. /gm, (_, ind, n) => `${ind}${chalk.bold.cyan(n + '.')} `)
-    .replace(/^\s*\x1b\[0m\s*$\n/gm, ''); // stray reset-only lines between nested list items
+  let ansi = marked.parser(tokens);
+  if (!plain) {
+    ansi = ansi
+      .replace(/^(\s*(?:\*|\d+\.) (?:\x1b\[0m)?)\[x\]/gim, (_, pre) => pre + chalk.green('✔'))
+      .replace(/^(\s*(?:\*|\d+\.) (?:\x1b\[0m)?)\[ \]/gm, (_, pre) => pre + chalk.dim('☐'))
+      .replace(/^(\s*)\* /gm, (_, ind) => `${ind}${chalk.cyan('•')} `)
+      .replace(/^(\s*)(\d+)\. /gm, (_, ind, n) => `${ind}${chalk.bold.cyan(n + '.')} `)
+      .replace(/^\s*\x1b\[0m\s*$\n/gm, ''); // stray reset-only lines between nested list items
+  }
 
   return ansi.replace(SENTINEL_RE, (_, n) => {
     const slot = slots[Number(n)];

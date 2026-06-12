@@ -22,6 +22,9 @@ mdlook does both, with one tiny CLI:
 - **Popup mode**: a chromeless app window (plain Chrome `--app`, no Electron) with
   GitHub styling, client-side mermaid, syntax highlighting, a dark-mode toggle, and
   live reload that survives editors' atomic saves.
+- **GitHub extras in both modes**: alerts (`> [!NOTE]`, `[!TIP]`, `[!WARNING]`, ...)
+  with proper colors and titles; YAML frontmatter is recognized and tucked away
+  (collapsible in the popup) instead of rendering as garbage.
 
 Everything renders locally — no CDN, no external services; your documents never
 leave your machine.
@@ -56,6 +59,8 @@ no missing content. Inside tmux, images are disabled.
 | `mdlook -`          | read from stdin                                            |
 | `--no-images`       | terminal mode: show mermaid/image sources as plain fences  |
 | `--refresh`         | re-render mermaid diagrams, ignoring the cache             |
+| `--plain`           | minimal styling (GitHub-faithful, no color accents)        |
+| `--pager` / `--no-pager` | force / suppress paging; long docs auto-page when images are off |
 | `--port N`          | fixed port for popup mode (default: random)                |
 
 Environment: `CHROME_PATH` points at a Chrome/Chromium binary; `MDLOOK_NO_OPEN=1`

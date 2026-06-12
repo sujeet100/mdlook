@@ -9,6 +9,7 @@ import { full as markdownItEmoji } from 'markdown-it-emoji';
 import markdownItAnchor from 'markdown-it-anchor';
 import hljs from 'highlight.js';
 import { findChrome } from './mermaid.js';
+import { stripFrontmatter } from './frontmatter.js';
 
 const PKG_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const NM = path.join(PKG_ROOT, 'node_modules');
@@ -68,10 +69,59 @@ function makeRenderer() {
     }
     return defaultFence(tokens, idx, options, env, self);
   };
+
+  // GitHub alerts: > [!NOTE] / [!TIP] / [!IMPORTANT] / [!WARNING] / [!CAUTION]
+  const ALERT_ICONS = { note: 'ℹ️', tip: '💡', important: '❗', warning: '⚠️', caution: '🛑' };
+  md.core.ruler.after('block', 'github-alerts', (state) => {
+    const toks = state.tokens;
+    for (let i = 0; i < toks.length; i++) {
+      if (toks[i].type !== 'blockquote_open') continue;
+      let j = i + 1;
+      while (j < toks.length && !['inline', 'blockquote_close'].includes(toks[j].type)) j++;
+      if (toks[j]?.type !== 'inline') continue;
+      const m = toks[j].content.match(/^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*/);
+      if (!m) continue;
+      const type = m[1].toLowerCase();
+      toks[i].attrJoin('class', `markdown-alert markdown-alert-${type}`);
+      // strip the marker (and its trailing softbreak) from the inline token
+      toks[j].content = toks[j].content.slice(m[0].length);
+      const kids = toks[j].children || [];
+      if (kids[0]?.type === 'text') {
+        kids[0].content = kids[0].content.replace(/^\[!\w+\]\s*/, '');
+        if (!kids[0].content) {
+          kids.shift();
+          if (kids[0]?.type === 'softbreak') kids.shift();
+        }
+      }
+      const title = new state.Token('html_block', '', 0);
+      title.content = `<p class="markdown-alert-title">${ALERT_ICONS[type]} ${m[1][0] + m[1].slice(1).toLowerCase()}</p>\n`;
+      toks.splice(i + 1, 0, title);
+    }
+  });
+
   return md;
 }
 
-function pageTemplate(title, body, savedTheme) {
+// alerts are GitHub semantics, not mdlook personality — styled even in --plain mode
+const ALERT_CSS = `
+  .markdown-alert { border-left: 4px solid; padding: 4px 16px; margin-bottom: 16px; color: inherit; background: transparent; border-radius: 0; }
+  .markdown-alert-title { font-weight: 600; margin: 4px 0; }
+  .markdown-alert-note { border-color: #0969da; } .markdown-alert-note .markdown-alert-title { color: #0969da; }
+  .markdown-alert-tip { border-color: #1a7f37; } .markdown-alert-tip .markdown-alert-title { color: #1a7f37; }
+  .markdown-alert-important { border-color: #8250df; } .markdown-alert-important .markdown-alert-title { color: #8250df; }
+  .markdown-alert-warning { border-color: #9a6700; } .markdown-alert-warning .markdown-alert-title { color: #9a6700; }
+  .markdown-alert-caution { border-color: #cf222e; } .markdown-alert-caution .markdown-alert-title { color: #cf222e; }
+  html.dark .markdown-alert-note { border-color: #2f81f7; } html.dark .markdown-alert-note .markdown-alert-title { color: #2f81f7; }
+  html.dark .markdown-alert-tip { border-color: #3fb950; } html.dark .markdown-alert-tip .markdown-alert-title { color: #3fb950; }
+  html.dark .markdown-alert-important { border-color: #a371f7; } html.dark .markdown-alert-important .markdown-alert-title { color: #a371f7; }
+  html.dark .markdown-alert-warning { border-color: #d29922; } html.dark .markdown-alert-warning .markdown-alert-title { color: #d29922; }
+  html.dark .markdown-alert-caution { border-color: #f85149; } html.dark .markdown-alert-caution .markdown-alert-title { color: #f85149; }
+  details.frontmatter { margin-bottom: 16px; opacity: .75; }
+  details.frontmatter summary { cursor: pointer; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+  details.frontmatter pre { margin-top: 8px; }
+`;
+
+function pageTemplate(title, body, savedTheme, plain) {
   return `<!doctype html>
 <html>
 <head>
@@ -97,7 +147,7 @@ function pageTemplate(title, body, savedTheme) {
   #theme-toggle:hover { opacity: 1; }
   html.dark #theme-toggle { background: #161b22cc; border-color: #30363d; }
 
-  /* a little personality on top of the GitHub base */
+${plain ? '' : `  /* a little personality on top of the GitHub base */
   article.markdown-body h1 {
     background: linear-gradient(90deg, #0891b2, #7c3aed, #db2777);
     -webkit-background-clip: text; background-clip: text; color: transparent;
@@ -110,7 +160,7 @@ function pageTemplate(title, body, savedTheme) {
   article.markdown-body h2 { color: #0891b2; border-bottom-color: #0891b233; }
   article.markdown-body h3 { color: #7c3aed; }
   article.markdown-body h4 { color: #db2777; }
-  article.markdown-body blockquote {
+  article.markdown-body blockquote:not(.markdown-alert) {
     border-left: 4px solid #7c3aed; background: #7c3aed10;
     border-radius: 0 6px 6px 0; padding: 8px 16px;
   }
@@ -121,8 +171,9 @@ function pageTemplate(title, body, savedTheme) {
   html.dark article.markdown-body h2 { color: #22d3ee; border-bottom-color: #22d3ee33; }
   html.dark article.markdown-body h3 { color: #a78bfa; }
   html.dark article.markdown-body h4 { color: #f472b6; }
-  html.dark article.markdown-body blockquote { border-left-color: #a78bfa; background: #a78bfa14; }
-  html.dark article.markdown-body table th { background: #22d3ee14; }
+  html.dark article.markdown-body blockquote:not(.markdown-alert) { border-left-color: #a78bfa; background: #a78bfa14; }
+  html.dark article.markdown-body table th { background: #22d3ee14; }`}
+${ALERT_CSS}
 </style>
 </head>
 <body>
@@ -212,12 +263,18 @@ function openWindow(url) {
   child.unref();
 }
 
-export async function serve({ filePath, baseDir, markdown, port }) {
+export async function serve({ filePath, baseDir, markdown, port, plain = false }) {
   const md = makeRenderer();
   const title = filePath ? path.basename(filePath) : 'stdin';
   let source = markdown;
 
-  const render = () => md.render(source);
+  const render = () => {
+    const { frontmatter, body } = stripFrontmatter(source);
+    const fmBlock = frontmatter
+      ? `<details class="frontmatter"><summary>frontmatter</summary><pre>${escapeHtml(frontmatter)}</pre></details>\n`
+      : '';
+    return fmBlock + md.render(body);
+  };
   let theme = readPrefs().theme ?? null; // 'light' | 'dark' | null = follow system
 
   const sseClients = new Set();
@@ -236,7 +293,7 @@ export async function serve({ filePath, baseDir, markdown, port }) {
 
     if (url === '/') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(pageTemplate(title, render(), theme));
+      res.end(pageTemplate(title, render(), theme, plain));
     } else if (url === '/theme/dark' || url === '/theme/light') {
       theme = url.split('/').pop();
       writePrefs({ ...readPrefs(), theme });

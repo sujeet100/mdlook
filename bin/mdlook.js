@@ -26,6 +26,9 @@ Options:
   -w, --window           popup window mode
   --no-images            terminal mode: skip inline images, show fences instead
   --refresh              re-render mermaid diagrams, ignoring the cache
+  --plain                minimal styling (GitHub-faithful, no color accents)
+  --pager                page output through $PAGER / less -R (disables images)
+  --no-pager             never page, even for long output
   --port N               fixed port for popup mode (default: random)
   -h, --help             show this help
 
@@ -56,6 +59,9 @@ try {
       window: { type: 'boolean', short: 'w', default: false },
       'no-images': { type: 'boolean', default: false },
       refresh: { type: 'boolean', default: false },
+      plain: { type: 'boolean', default: false },
+      pager: { type: 'boolean', default: false },
+      'no-pager': { type: 'boolean', default: false },
       port: { type: 'string', default: '0' },
       help: { type: 'boolean', short: 'h', default: false },
     },
@@ -96,18 +102,47 @@ if (target === '-') {
 }
 
 const baseDir = filePath ? path.dirname(filePath) : process.cwd();
+const { stripFrontmatter } = await import('../src/frontmatter.js');
 
 if (args.values.window) {
   const { serve } = await import('../src/server.js');
-  await serve({ filePath, baseDir, markdown, port: Number(args.values.port) });
+  await serve({
+    filePath,
+    baseDir,
+    markdown,
+    port: Number(args.values.port),
+    plain: args.values.plain,
+  });
 } else {
   const { renderToTerminal } = await import('../src/terminal.js');
   const images =
-    !args.values['no-images'] && process.stdout.isTTY && supportsInlineImages(process.env);
-  const out = await renderToTerminal(markdown, {
+    !args.values['no-images'] &&
+    !args.values.pager && // pagers can't display kitty graphics
+    process.stdout.isTTY &&
+    supportsInlineImages(process.env);
+  const out = await renderToTerminal(stripFrontmatter(markdown).body, {
     baseDir,
     images,
     refresh: args.values.refresh,
+    plain: args.values.plain,
   });
-  process.stdout.write(out);
+
+  // Page long output — but only when there are no inline images (they don't
+  // survive a pager's alternate screen; terminal scrollback handles that case).
+  const rows = process.stdout.rows || 24;
+  const shouldPage =
+    args.values.pager ||
+    (!args.values['no-pager'] && !images && process.stdout.isTTY &&
+      out.split('\n').length > rows);
+  if (shouldPage) {
+    const { spawn } = await import('node:child_process');
+    const [cmd, ...cmdArgs] = (process.env.PAGER || 'less -R').split(/\s+/);
+    const pager = spawn(cmd, cmdArgs, { stdio: ['pipe', 'inherit', 'inherit'] });
+    pager.on('error', () => process.stdout.write(out));
+    pager.stdin.on('error', () => {}); // pager quit early — not an error
+    pager.stdin.end(out);
+    await new Promise((resolve) => pager.on('close', resolve));
+  } else {
+    process.stdout.write(out);
+  }
 }
