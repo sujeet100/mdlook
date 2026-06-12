@@ -154,7 +154,9 @@ export async function renderToTerminal(markdown, { baseDir, images, refresh, pla
           width: termCols,
           emoji: true,
           showSectionPrefix: false, // drop literal #/## markers
-          firstHeading: (s) => chalk.bgCyan.black.bold(` ${ansiSafeUpper(s)} `),
+          // inverse video swaps the theme's own fg/bg — readable in any palette,
+          // unlike a fixed bg color whose contrast is at the theme's mercy
+          firstHeading: (s) => chalk.inverse.bold(` ${ansiSafeUpper(s)} `),
           heading: (s) => (HEADING_STYLES[headingDepth] || HEADING_STYLES[6])(s),
           hr: (s) => chalk.cyan.dim(s),
           tableOptions: { style: { head: ['cyan', 'bold'], border: ['grey'] } },
