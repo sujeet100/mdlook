@@ -133,9 +133,12 @@ export async function renderToTerminal(markdown, { baseDir, images, refresh, pla
   // distinct style per heading level: hue + weight stand in for font size.
   // H2 is a full-width band — terminals can't change font size, so a block of
   // background color is what makes section boundaries scannable.
+  // 256-cube colors (16-231) are fixed RGB that themes don't remap, unlike the
+  // 16 ANSI colors — Catppuccin maps brightWhite to lavender and magenta to pink,
+  // which made whiteBright-on-bgMagenta unreadable. 90 = dark magenta, 231 = white.
   const h2Band = (s) => {
     const pad = Math.max(0, termCols - visibleLen(s) - 2);
-    return chalk.bgMagenta.whiteBright.bold(` ${s} ${' '.repeat(pad)}`);
+    return chalk.bgAnsi256(90).ansi256(231).bold(` ${s} ${' '.repeat(pad)}`);
   };
   const HEADING_STYLES = {
     2: h2Band,
