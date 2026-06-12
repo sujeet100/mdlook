@@ -1,0 +1,43 @@
+{
+  "name": "mdlook",
+  "version": "0.1.0",
+  "description": "Markdown previewer with real mermaid diagrams — inline in your terminal or in a popup window with live reload",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "mdlook": "./bin/mdlook.js",
+    "mdlookw": "./bin/mdlookw.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [
+    "markdown",
+    "preview",
+    "mermaid",
+    "terminal",
+    "cli",
+    "kitty-graphics",
+    "live-reload",
+    "readme"
+  ],
+  "dependencies": {
+    "chalk": "^5",
+    "github-markdown-css": "^5",
+    "highlight.js": "^11",
+    "markdown-it": "^14",
+    "markdown-it-anchor": "^9",
+    "markdown-it-emoji": "^3",
+    "marked": "^15",
+    "marked-terminal": "^7",
+    "mermaid": "^11",
+    "puppeteer-core": "^24",
+    "cli-highlight": "^2"
+  }
+}
