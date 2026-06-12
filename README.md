@@ -98,6 +98,23 @@ flowchart LR
 - Dark mode: terminal diagrams and code panels follow your terminal's detected
   background; the popup follows the OS, with a manual toggle persisted across runs.
 
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) — dev setup, tests (`npm test`), lint
+(`npm run lint`), and project conventions.
+
+## Releasing (maintainers)
+
+```sh
+npm version patch        # or minor / major — bumps package.json and creates a git tag
+git push --follow-tags   # push the commit and the tag
+npm publish              # requires npm 2FA
+```
+
+`npm version` follows [semver](https://semver.org/): `patch` for fixes, `minor` for new
+features, `major` for breaking changes. Update [CHANGELOG.md](./CHANGELOG.md) before
+tagging.
+
 ## License
 
 MIT

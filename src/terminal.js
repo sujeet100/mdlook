@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import chalk from 'chalk';
+import { supportsLanguage } from 'cli-highlight';
 import { Marked } from 'marked';
 import { markedTerminal } from 'marked-terminal';
-import { supportsLanguage } from 'cli-highlight';
-import chalk from 'chalk';
-import { renderMermaid, closeMermaidBrowser } from './mermaid.js';
+import { closeMermaidBrowser, renderMermaid } from './mermaid.js';
 
 const SENTINEL = (i) => `\x00MDVIMG${i}\x00`;
 const SENTINEL_RE = /\x00MDVIMG(\d+)\x00/g;
@@ -49,7 +49,7 @@ function kittyImage(buf, termCols) {
     const head = i === 0 ? `${ctrl},m=${last ? 0 : 1}` : `m=${last ? 0 : 1}`;
     out += `\x1b_G${head};${b64.slice(i, i + 4096)}\x1b\\`;
   }
-  return out + '\n';
+  return `${out}\n`;
 }
 
 const ANSI_RE = /\x1b\[[0-9;]*m/g;
@@ -57,7 +57,9 @@ const visibleLen = (s) => s.replace(ANSI_RE, '').length;
 
 // uppercase the text but leave ANSI escape sequences untouched ("\x1b[1m" must not become "\x1b[1M")
 const ansiSafeUpper = (s) =>
-  s.replace(/\x1b\[[0-9;]*m|[^\x1b]+/g, (seg) => (seg.startsWith('\x1b') ? seg : seg.toUpperCase()));
+  s.replace(/\x1b\[[0-9;]*m|[^\x1b]+/g, (seg) =>
+    seg.startsWith('\x1b') ? seg : seg.toUpperCase(),
+  );
 
 // Ask the terminal for its background color (OSC 11) to pick a panel shade
 // that works on both light and dark themes. Falls back to COLORFGBG, then dark.
@@ -103,13 +105,13 @@ function codePanel(rendered, bg, termCols) {
   const width = Math.min(termCols, Math.max(...lines.map(visibleLen)) + 4);
   const blank = bg(' '.repeat(width));
   const padded = lines.map((l) => bg(l + ' '.repeat(Math.max(0, width - visibleLen(l)))));
-  return '\n' + [blank, ...padded, blank].join('\n') + '\n\n';
+  return `\n${[blank, ...padded, blank].join('\n')}\n\n`;
 }
 
 function errorFence(source, message) {
   const code = source
     .split('\n')
-    .map((l) => '  ' + chalk.gray(l))
+    .map((l) => `  ${chalk.gray(l)}`)
     .join('\n');
   return `${code}\n  ${chalk.red(`✗ mermaid render failed: ${message}`)}\n`;
 }
@@ -138,12 +140,15 @@ export async function renderToTerminal(markdown, { baseDir, images, refresh, pla
   // which made whiteBright-on-bgMagenta unreadable. 90 = dark magenta, 231 = white.
   const h2Band = (s) => {
     const pad = Math.max(0, termCols - visibleLen(s) - 2);
-    return chalk.bgAnsi256(90).ansi256(231).bold(` ${s} ${' '.repeat(pad)}`);
+    return chalk
+      .bgAnsi256(90)
+      .ansi256(231)
+      .bold(` ${s} ${' '.repeat(pad)}`);
   };
   const HEADING_STYLES = {
     2: h2Band,
-    3: (s) => chalk.bold.cyan('◆ ' + s),
-    4: (s) => chalk.bold.blue('◇ ' + s),
+    3: (s) => chalk.bold.cyan(`◆ ${s}`),
+    4: (s) => chalk.bold.blue(`◇ ${s}`),
     5: (s) => chalk.bold.green(s),
     6: (s) => chalk.bold.dim(s),
   };
@@ -209,9 +214,9 @@ export async function renderToTerminal(markdown, { baseDir, images, refresh, pla
     if (alertType) {
       const { color, icon, label } = ALERTS[alertType];
       bar = color;
-      lines = [' ' + color.bold(`${icon} ${label}`), ...lines.slice(1)];
+      lines = [` ${color.bold(`${icon} ${label}`)}`, ...lines.slice(1)];
     }
-    return '\n' + lines.map((l) => bar('▌') + l).join('\n') + '\n\n';
+    return `\n${lines.map((l) => bar('▌') + l).join('\n')}\n\n`;
   };
   const marked = new Marked(ext);
   const tokens = marked.lexer(markdown);
@@ -255,7 +260,7 @@ export async function renderToTerminal(markdown, { baseDir, images, refresh, pla
       .replace(/^(\s*(?:\*|\d+\.) (?:\x1b\[0m)?)\[x\]/gim, (_, pre) => pre + chalk.green('✔'))
       .replace(/^(\s*(?:\*|\d+\.) (?:\x1b\[0m)?)\[ \]/gm, (_, pre) => pre + chalk.dim('☐'))
       .replace(/^(\s*)\* /gm, (_, ind) => `${ind}${chalk.cyan('•')} `)
-      .replace(/^(\s*)(\d+)\. /gm, (_, ind, n) => `${ind}${chalk.bold.cyan(n + '.')} `)
+      .replace(/^(\s*)(\d+)\. /gm, (_, ind, n) => `${ind}${chalk.bold.cyan(`${n}.`)} `)
       .replace(/^\s*(?:\x1b\[0m\s*)+$\n/gm, ''); // stray reset-only lines between nested list items
   }
 
@@ -266,7 +271,7 @@ export async function renderToTerminal(markdown, { baseDir, images, refresh, pla
     try {
       return kittyImage(fs.readFileSync(slot.png || slot.file), termCols);
     } catch (err) {
-      return chalk.red(`✗ cannot display image: ${err.message}`) + '\n';
+      return `${chalk.red(`✗ cannot display image: ${err.message}`)}\n`;
     }
   });
 }

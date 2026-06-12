@@ -38,6 +38,7 @@
   ],
   "dependencies": {
     "chalk": "^5",
+    "cli-highlight": "^2",
     "github-markdown-css": "^5",
     "highlight.js": "^11",
     "markdown-it": "^14",
@@ -46,7 +47,15 @@
     "marked": "^15",
     "marked-terminal": "^7",
     "mermaid": "^11",
-    "puppeteer-core": "^24",
-    "cli-highlight": "^2"
+    "puppeteer-core": "^24"
+  },
+  "scripts": {
+    "test": "node --test",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write ."
+  },
+  "exports": {},
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.16"
   }
 }

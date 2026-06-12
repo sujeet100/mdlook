@@ -17,3 +17,9 @@ tags: [demo]
 > a normal blockquote, not an alert
 
 text after
+
+## Checklist
+
+- [x] shipped
+- [ ] pending
+

@@ -40,10 +40,19 @@ export function findChrome() {
       '/usr/bin/microsoft-edge',
     ],
     win32: [
-      path.join(process.env.PROGRAMFILES || 'C:\\Program Files', 'Google\\Chrome\\Application\\chrome.exe'),
-      path.join(process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)', 'Google\\Chrome\\Application\\chrome.exe'),
+      path.join(
+        process.env.PROGRAMFILES || 'C:\\Program Files',
+        'Google\\Chrome\\Application\\chrome.exe',
+      ),
+      path.join(
+        process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)',
+        'Google\\Chrome\\Application\\chrome.exe',
+      ),
       path.join(process.env.LOCALAPPDATA || '', 'Google\\Chrome\\Application\\chrome.exe'),
-      path.join(process.env.PROGRAMFILES || 'C:\\Program Files', 'Microsoft\\Edge\\Application\\msedge.exe'),
+      path.join(
+        process.env.PROGRAMFILES || 'C:\\Program Files',
+        'Microsoft\\Edge\\Application\\msedge.exe',
+      ),
     ],
   };
   return (candidates[process.platform] || []).find((p) => p && fs.existsSync(p)) || null;
@@ -103,18 +112,22 @@ async function renderToPng(source, pngPath, theme) {
   try {
     await page.setViewport({ width: 1400, height: 1000, deviceScaleFactor: 2 });
     await page.addScriptTag({ path: MERMAID_JS });
-    const result = await page.evaluate(async (src, theme) => {
-      try {
-        mermaid.initialize({ startOnLoad: false, theme });
-        const { svg } = await mermaid.render('mdv', src);
-        document.body.style.cssText = 'margin:0;background:transparent';
-        document.body.innerHTML = svg;
-        document.querySelector('svg').style.display = 'block';
-        return { ok: true };
-      } catch (e) {
-        return { ok: false, error: String(e.message || e).split('\n')[0] };
-      }
-    }, source, theme);
+    const result = await page.evaluate(
+      async (src, theme) => {
+        try {
+          mermaid.initialize({ startOnLoad: false, theme });
+          const { svg } = await mermaid.render('mdv', src);
+          document.body.style.cssText = 'margin:0;background:transparent';
+          document.body.innerHTML = svg;
+          document.querySelector('svg').style.display = 'block';
+          return { ok: true };
+        } catch (e) {
+          return { ok: false, error: String(e.message || e).split('\n')[0] };
+        }
+      },
+      source,
+      theme,
+    );
     if (!result.ok) {
       // a real mermaid parse error — safe to negative-cache, unlike env failures
       const err = new Error(result.error);
@@ -136,7 +149,7 @@ async function renderToPng(source, pngPath, theme) {
 export async function renderMermaid(source, { refresh = false, theme = 'dark' } = {}) {
   fs.mkdirSync(CACHE_DIR, { recursive: true });
   const hash = createHash('sha256')
-    .update(source + '\0' + theme + '\0' + getMermaidVersion())
+    .update(`${source}\0${theme}\0${getMermaidVersion()}`)
     .digest('hex');
   const pngPath = path.join(CACHE_DIR, `${hash}.png`);
   const errPath = path.join(CACHE_DIR, `${hash}.err`);

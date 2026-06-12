@@ -1,22 +1,28 @@
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import MarkdownIt from 'markdown-it';
-import { full as markdownItEmoji } from 'markdown-it-emoji';
-import markdownItAnchor from 'markdown-it-anchor';
 import hljs from 'highlight.js';
-import { findChrome } from './mermaid.js';
+import MarkdownIt from 'markdown-it';
+import markdownItAnchor from 'markdown-it-anchor';
+import { full as markdownItEmoji } from 'markdown-it-emoji';
 import { stripFrontmatter } from './frontmatter.js';
+import { findChrome } from './mermaid.js';
 
 const PKG_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const NM = path.join(PKG_ROOT, 'node_modules');
 
 const ASSETS = {
-  '/assets/markdown-light.css': [path.join(NM, 'github-markdown-css', 'github-markdown-light.css'), 'text/css'],
-  '/assets/markdown-dark.css': [path.join(NM, 'github-markdown-css', 'github-markdown-dark.css'), 'text/css'],
+  '/assets/markdown-light.css': [
+    path.join(NM, 'github-markdown-css', 'github-markdown-light.css'),
+    'text/css',
+  ],
+  '/assets/markdown-dark.css': [
+    path.join(NM, 'github-markdown-css', 'github-markdown-dark.css'),
+    'text/css',
+  ],
   '/assets/hljs-light.css': [path.join(NM, 'highlight.js', 'styles', 'github.css'), 'text/css'],
   '/assets/hljs-dark.css': [path.join(NM, 'highlight.js', 'styles', 'github-dark.css'), 'text/css'],
   '/assets/mermaid.js': [path.join(NM, 'mermaid', 'dist', 'mermaid.min.js'), 'text/javascript'],
@@ -37,8 +43,14 @@ function writePrefs(prefs) {
 }
 
 const STATIC_TYPES = {
-  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
-  '.svg': 'image/svg+xml', '.webp': 'image/webp', '.css': 'text/css', '.txt': 'text/plain',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.webp': 'image/webp',
+  '.css': 'text/css',
+  '.txt': 'text/plain',
   '.md': 'text/plain',
 };
 
@@ -99,6 +111,25 @@ function makeRenderer() {
     }
   });
 
+  // GitHub task lists: - [x] / - [ ] become disabled checkboxes
+  md.core.ruler.after('inline', 'task-lists', (state) => {
+    const toks = state.tokens;
+    for (let i = 2; i < toks.length; i++) {
+      if (toks[i].type !== 'inline') continue;
+      if (toks[i - 1]?.type !== 'paragraph_open' || toks[i - 2]?.type !== 'list_item_open')
+        continue;
+      const kids = toks[i].children;
+      if (kids?.[0]?.type !== 'text') continue;
+      const m = kids[0].content.match(/^\[([ xX])\] /);
+      if (!m) continue;
+      kids[0].content = kids[0].content.slice(m[0].length);
+      const box = new state.Token('html_inline', '', 0);
+      box.content = `<input type="checkbox" class="task-list-item-checkbox" disabled${m[1] === ' ' ? '' : ' checked'}> `;
+      kids.unshift(box);
+      toks[i - 2].attrJoin('class', 'task-list-item');
+    }
+  });
+
   return md;
 }
 
@@ -119,6 +150,8 @@ const ALERT_CSS = `
   details.frontmatter { margin-bottom: 16px; opacity: .75; }
   details.frontmatter summary { cursor: pointer; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
   details.frontmatter pre { margin-top: 8px; }
+  li.task-list-item { list-style-type: none; margin-left: -1.4em; }
+  li.task-list-item .task-list-item-checkbox { margin-right: .45em; vertical-align: middle; }
 `;
 
 function pageTemplate(title, body, savedTheme, plain) {
@@ -147,7 +180,10 @@ function pageTemplate(title, body, savedTheme, plain) {
   #theme-toggle:hover { opacity: 1; }
   html.dark #theme-toggle { background: #161b22cc; border-color: #30363d; }
 
-${plain ? '' : `  /* a little personality on top of the GitHub base */
+${
+  plain
+    ? ''
+    : `  /* a little personality on top of the GitHub base */
   article.markdown-body h1 {
     background: linear-gradient(90deg, #0891b2, #7c3aed, #db2777);
     -webkit-background-clip: text; background-clip: text; color: transparent;
@@ -172,7 +208,8 @@ ${plain ? '' : `  /* a little personality on top of the GitHub base */
   html.dark article.markdown-body h3 { color: #a78bfa; }
   html.dark article.markdown-body h4 { color: #f472b6; }
   html.dark article.markdown-body blockquote:not(.markdown-alert) { border-left-color: #a78bfa; background: #a78bfa14; }
-  html.dark article.markdown-body table th { background: #22d3ee14; }`}
+  html.dark article.markdown-body table th { background: #22d3ee14; }`
+}
 ${ALERT_CSS}
 </style>
 </head>
@@ -231,9 +268,11 @@ ${ALERT_CSS}
 // cross-platform "open in default browser" with a survivable failure mode
 function openExternal(url) {
   const [cmd, ...cmdArgs] =
-    process.platform === 'darwin' ? ['open', url]
-    : process.platform === 'win32' ? ['cmd', '/c', 'start', '', url]
-    : ['xdg-open', url];
+    process.platform === 'darwin'
+      ? ['open', url]
+      : process.platform === 'win32'
+        ? ['cmd', '/c', 'start', '', url]
+        : ['xdg-open', url];
   const child = spawn(cmd, cmdArgs, { detached: true, stdio: 'ignore' });
   child.on('error', () => console.error(`mdlook: could not open a browser — visit ${url}`));
   child.unref();
@@ -249,13 +288,17 @@ function openWindow(url) {
   }
   // Dedicated user-data-dir forces a separate Chrome process: --window-size is
   // honored, and closing the window drops the SSE connection so we can auto-exit.
-  const child = spawn(chrome, [
-    `--app=${url}`,
-    `--user-data-dir=${path.join(os.homedir(), '.cache', 'mdlook', 'chrome-profile')}`,
-    '--no-first-run',
-    '--no-default-browser-check',
-    '--window-size=980,1100',
-  ], { detached: true, stdio: 'ignore' });
+  const child = spawn(
+    chrome,
+    [
+      `--app=${url}`,
+      `--user-data-dir=${path.join(os.homedir(), '.cache', 'mdlook', 'chrome-profile')}`,
+      '--no-first-run',
+      '--no-default-browser-check',
+      '--window-size=980,1100',
+    ],
+    { detached: true, stdio: 'ignore' },
+  );
   child.on('error', () => {
     console.error('mdlook: failed to launch Chrome, opening in default browser');
     openExternal(url);
@@ -315,7 +358,10 @@ export async function serve({ filePath, baseDir, markdown, port, plain = false }
       res.write(': connected\n\n');
       sseClients.add(res);
       hadClient = true;
-      if (exitTimer) { clearTimeout(exitTimer); exitTimer = null; }
+      if (exitTimer) {
+        clearTimeout(exitTimer);
+        exitTimer = null;
+      }
       req.on('close', () => {
         sseClients.delete(res);
         if (hadClient && sseClients.size === 0) {
@@ -324,13 +370,20 @@ export async function serve({ filePath, baseDir, markdown, port, plain = false }
       });
     } else {
       // static files (e.g. images referenced by the markdown), jailed to baseDir
-      const file = path.resolve(baseDir, '.' + url);
-      if (!file.startsWith(baseDir + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
+      const file = path.resolve(baseDir, `.${url}`);
+      if (
+        !file.startsWith(baseDir + path.sep) ||
+        !fs.existsSync(file) ||
+        !fs.statSync(file).isFile()
+      ) {
         res.writeHead(404);
         res.end('not found');
         return;
       }
-      res.writeHead(200, { 'Content-Type': STATIC_TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream' });
+      res.writeHead(200, {
+        'Content-Type':
+          STATIC_TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream',
+      });
       fs.createReadStream(file).pipe(res);
     }
   });
@@ -344,7 +397,7 @@ export async function serve({ filePath, baseDir, markdown, port, plain = false }
     // Watch the directory, not the file: editors with atomic saves (VS Code,
     // IntelliJ) replace the inode, which kills a direct file watch.
     let debounce = null;
-    fs.watch(path.dirname(filePath), (event, name) => {
+    const watcher = fs.watch(path.dirname(filePath), (_event, name) => {
       if (name !== path.basename(filePath)) return;
       clearTimeout(debounce);
       debounce = setTimeout(() => {
@@ -356,6 +409,8 @@ export async function serve({ filePath, baseDir, markdown, port, plain = false }
         for (const res of sseClients) res.write('data: reload\n\n');
       }, 100);
     });
+    // deleting the watched directory must degrade to "no live reload", not a crash
+    watcher.on('error', () => watcher.close());
   }
 
   server.listen(port || 0, '127.0.0.1', () => {

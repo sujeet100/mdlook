@@ -1,12 +1,14 @@
 #!/usr/bin/env node
-import { enableCompileCache } from 'node:module';
-import { parseArgs } from 'node:util';
 import { readFileSync } from 'node:fs';
+import { enableCompileCache } from 'node:module';
 import path from 'node:path';
 import process from 'node:process';
+import { parseArgs } from 'node:util';
 
 // V8 bytecode cache (Node 22.8+) — cuts repeat-run import time for the heavy deps
-try { enableCompileCache(); } catch {}
+try {
+  enableCompileCache();
+} catch {}
 
 // exit quietly when the downstream pipe closes early (mdlook x.md | head)
 process.stdout.on('error', (err) => {
@@ -31,6 +33,7 @@ Options:
   --no-pager             never page, even for long output
   --port N               fixed port for popup mode (default: random)
   -h, --help             show this help
+  -v, --version          show version
 
 Environment:
   CHROME_PATH            Chrome/Chromium binary for diagrams and the popup window
@@ -44,11 +47,11 @@ function supportsInlineImages(env) {
   if (env.TMUX) return false;
   return Boolean(
     env.KITTY_WINDOW_ID ||
-    env.GHOSTTY_RESOURCES_DIR ||
-    env.WEZTERM_EXECUTABLE ||
-    env.KONSOLE_VERSION ||
-    /kitty|ghostty/i.test(env.TERM || '') ||
-    /ghostty|wezterm/i.test(env.TERM_PROGRAM || ''),
+      env.GHOSTTY_RESOURCES_DIR ||
+      env.WEZTERM_EXECUTABLE ||
+      env.KONSOLE_VERSION ||
+      /kitty|ghostty/i.test(env.TERM || '') ||
+      /ghostty|wezterm/i.test(env.TERM_PROGRAM || ''),
   );
 }
 
@@ -64,12 +67,13 @@ try {
       'no-pager': { type: 'boolean', default: false },
       port: { type: 'string', default: '0' },
       help: { type: 'boolean', short: 'h', default: false },
+      version: { type: 'boolean', short: 'v', default: false },
     },
     allowPositionals: true,
   });
 } catch (err) {
   console.error(`mdlook: ${err.message}`);
-  process.exit(1);
+  process.exit(2);
 }
 
 if (args.values.help) {
@@ -77,10 +81,17 @@ if (args.values.help) {
   process.exit(0);
 }
 
-const target = args.positionals[0];
+if (args.values.version) {
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  process.stdout.write(`${pkg.version}\n`);
+  process.exit(0);
+}
+
+// no file argument but piped input → read stdin, like `mdlook -`
+const target = args.positionals[0] ?? (process.stdin.isTTY ? null : '-');
 if (!target) {
   console.error('mdlook: no input file (try `mdlook README.md` or `mdlook --help`)');
-  process.exit(1);
+  process.exit(2);
 }
 
 let markdown;
@@ -93,9 +104,11 @@ if (target === '-') {
     markdown = readFileSync(filePath, 'utf8');
   } catch (err) {
     const reason =
-      err.code === 'ENOENT' ? 'no such file'
-      : err.code === 'EISDIR' ? 'is a directory (mdlook previews single files)'
-      : err.message;
+      err.code === 'ENOENT'
+        ? 'no such file'
+        : err.code === 'EISDIR'
+          ? 'is a directory (mdlook previews single files)'
+          : err.message;
     console.error(`mdlook: cannot read ${target}: ${reason}`);
     process.exit(1);
   }
@@ -132,8 +145,7 @@ if (args.values.window) {
   const rows = process.stdout.rows || 24;
   const shouldPage =
     args.values.pager ||
-    (!args.values['no-pager'] && !images && process.stdout.isTTY &&
-      out.split('\n').length > rows);
+    (!args.values['no-pager'] && !images && process.stdout.isTTY && out.split('\n').length > rows);
   if (shouldPage) {
     const { spawn } = await import('node:child_process');
     const [cmd, ...cmdArgs] = (process.env.PAGER || 'less -R').split(/\s+/);
