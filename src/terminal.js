@@ -167,6 +167,17 @@ export async function renderToTerminal(markdown, { baseDir, images, refresh, pla
     headingDepth = token?.depth ?? 2;
     return origHeading.call(this, token, ...rest);
   };
+  // Remote images (badges etc.) otherwise render as raw ![alt](url) markdown.
+  // Local raster images are sentinel-swapped before this runs, so only
+  // non-displayable ones reach here.
+  const origImage = ext.renderer.image;
+  ext.renderer.image = function (token, ...rest) {
+    if (token && typeof token === 'object' && token.href) {
+      const alt = token.text || token.title || 'image';
+      return chalk.blue(`🖼 ${alt}`) + chalk.dim(` (${token.href})`);
+    }
+    return origImage.call(this, token, ...rest);
+  };
   // marked-terminal's text() drops a token's parsed inline children and emits the
   // raw text — list items arrive as such tokens, leaving **bold** and `code`
   // literal. Render the children through the inline parser instead.
@@ -235,14 +246,14 @@ export async function renderToTerminal(markdown, { baseDir, images, refresh, pla
   // Recolor list markers AFTER rendering: marked-terminal relies on literal
   // "* " prefixes while assembling nested lists, so this can't happen earlier.
   // Code-block lines are immune — they start with the panel's bg escape, not whitespace.
-  let ansi = marked.parser(tokens);
+  let ansi = marked.parser(tokens).replace(/&nbsp;/g, ' ');
   if (!plain) {
     ansi = ansi
       .replace(/^(\s*(?:\*|\d+\.) (?:\x1b\[0m)?)\[x\]/gim, (_, pre) => pre + chalk.green('✔'))
       .replace(/^(\s*(?:\*|\d+\.) (?:\x1b\[0m)?)\[ \]/gm, (_, pre) => pre + chalk.dim('☐'))
       .replace(/^(\s*)\* /gm, (_, ind) => `${ind}${chalk.cyan('•')} `)
       .replace(/^(\s*)(\d+)\. /gm, (_, ind, n) => `${ind}${chalk.bold.cyan(n + '.')} `)
-      .replace(/^\s*\x1b\[0m\s*$\n/gm, ''); // stray reset-only lines between nested list items
+      .replace(/^\s*(?:\x1b\[0m\s*)+$\n/gm, ''); // stray reset-only lines between nested list items
   }
 
   return ansi.replace(SENTINEL_RE, (_, n) => {
