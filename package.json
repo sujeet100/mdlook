@@ -4,6 +4,15 @@
   "description": "Markdown previewer with real mermaid diagrams — inline in your terminal or in a popup window with live reload",
   "type": "module",
   "license": "MIT",
+  "author": "Sujit Kamthe",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sujeet100/mdlook.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sujeet100/mdlook/issues"
+  },
+  "homepage": "https://github.com/sujeet100/mdlook#readme",
   "bin": {
     "mdlook": "./bin/mdlook.js",
     "mdlookw": "./bin/mdlookw.js"
