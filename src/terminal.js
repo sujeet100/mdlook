@@ -55,6 +55,10 @@ function kittyImage(buf, termCols) {
 const ANSI_RE = /\x1b\[[0-9;]*m/g;
 const visibleLen = (s) => s.replace(ANSI_RE, '').length;
 
+// uppercase the text but leave ANSI escape sequences untouched ("\x1b[1m" must not become "\x1b[1M")
+const ansiSafeUpper = (s) =>
+  s.replace(/\x1b\[[0-9;]*m|[^\x1b]+/g, (seg) => (seg.startsWith('\x1b') ? seg : seg.toUpperCase()));
+
 // Ask the terminal for its background color (OSC 11) to pick a panel shade
 // that works on both light and dark themes. Falls back to COLORFGBG, then dark.
 function detectLightBackground() {
@@ -126,9 +130,15 @@ export async function renderToTerminal(markdown, { baseDir, images, refresh, pla
   const panelBg = chalk.bgAnsi256(lightBg ? 254 : 236);
   const mermaidTheme = lightBg ? 'default' : 'dark'; // diagram text must contrast the terminal bg
 
-  // distinct style per heading level: hue + weight stand in for font size
+  // distinct style per heading level: hue + weight stand in for font size.
+  // H2 is a full-width band — terminals can't change font size, so a block of
+  // background color is what makes section boundaries scannable.
+  const h2Band = (s) => {
+    const pad = Math.max(0, termCols - visibleLen(s) - 2);
+    return chalk.bgMagenta.whiteBright.bold(` ${s} ${' '.repeat(pad)}`);
+  };
   const HEADING_STYLES = {
-    2: (s) => chalk.bold.underline.magenta(s),
+    2: h2Band,
     3: (s) => chalk.bold.cyan('◆ ' + s),
     4: (s) => chalk.bold.blue('◇ ' + s),
     5: (s) => chalk.bold.green(s),
@@ -144,7 +154,7 @@ export async function renderToTerminal(markdown, { baseDir, images, refresh, pla
           width: termCols,
           emoji: true,
           showSectionPrefix: false, // drop literal #/## markers
-          firstHeading: (s) => chalk.bgCyan.black.bold(` ${s.toUpperCase()} `),
+          firstHeading: (s) => chalk.bgCyan.black.bold(` ${ansiSafeUpper(s)} `),
           heading: (s) => (HEADING_STYLES[headingDepth] || HEADING_STYLES[6])(s),
           hr: (s) => chalk.cyan.dim(s),
           tableOptions: { style: { head: ['cyan', 'bold'], border: ['grey'] } },
@@ -154,6 +164,16 @@ export async function renderToTerminal(markdown, { baseDir, images, refresh, pla
   ext.renderer.heading = function (token, ...rest) {
     headingDepth = token?.depth ?? 2;
     return origHeading.call(this, token, ...rest);
+  };
+  // marked-terminal's text() drops a token's parsed inline children and emits the
+  // raw text — list items arrive as such tokens, leaving **bold** and `code`
+  // literal. Render the children through the inline parser instead.
+  const origText = ext.renderer.text;
+  ext.renderer.text = function (token, ...rest) {
+    if (token && typeof token === 'object' && token.tokens?.length) {
+      return this.parser.parseInline(token.tokens);
+    }
+    return origText.call(this, token, ...rest);
   };
   const origCode = ext.renderer.code;
   ext.renderer.code = function (token, ...rest) {

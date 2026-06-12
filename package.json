@@ -1,6 +1,6 @@
 {
   "name": "mdlook",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Markdown previewer with real mermaid diagrams — inline in your terminal or in a popup window with live reload",
   "type": "module",
   "license": "MIT",
