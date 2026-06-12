@@ -133,28 +133,16 @@ if (args.values.window) {
     !args.values.pager && // pagers can't display kitty graphics
     process.stdout.isTTY &&
     supportsInlineImages(process.env);
+  const { writeOutput } = await import('../src/pager.js');
   const out = await renderToTerminal(stripFrontmatter(markdown).body, {
     baseDir,
     images,
     refresh: args.values.refresh,
     plain: args.values.plain,
   });
-
-  // Page long output — but only when there are no inline images (they don't
-  // survive a pager's alternate screen; terminal scrollback handles that case).
-  const rows = process.stdout.rows || 24;
-  const shouldPage =
-    args.values.pager ||
-    (!args.values['no-pager'] && !images && process.stdout.isTTY && out.split('\n').length > rows);
-  if (shouldPage) {
-    const { spawn } = await import('node:child_process');
-    const [cmd, ...cmdArgs] = (process.env.PAGER || 'less -R').split(/\s+/);
-    const pager = spawn(cmd, cmdArgs, { stdio: ['pipe', 'inherit', 'inherit'] });
-    pager.on('error', () => process.stdout.write(out));
-    pager.stdin.on('error', () => {}); // pager quit early — not an error
-    pager.stdin.end(out);
-    await new Promise((resolve) => pager.on('close', resolve));
-  } else {
-    process.stdout.write(out);
-  }
+  await writeOutput(out, {
+    forcePager: args.values.pager,
+    noPager: args.values['no-pager'],
+    images,
+  });
 }
