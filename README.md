@@ -9,6 +9,16 @@ mdlookw README.md        # chromeless popup window, live-reloads on save
 cat notes.md | mdlook -  # stdin
 ```
 
+![mdlook rendering a markdown file with an inline mermaid diagram in the terminal](https://raw.githubusercontent.com/sujeet100/mdlook/main/demo/mdlook-dark.png)
+
+**Follows your terminal theme** — same file, light theme, no flags:
+
+![the same document rendered on a light terminal theme](https://raw.githubusercontent.com/sujeet100/mdlook/main/demo/mdlook-light.png)
+
+**Popup mode** (`mdlookw`) with the dark-mode toggle:
+
+![popup window mode shown in light and dark](https://raw.githubusercontent.com/sujeet100/mdlook/main/demo/mdlookw-light-dark.png)
+
 ## Why
 
 Terminal markdown viewers don't render mermaid (glow's most-requested features are
